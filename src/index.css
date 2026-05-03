@@ -1,0 +1,102 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #0d1117;
+  color: #d7e0ee;
+  font-family: 'DM Mono', ui-monospace, monospace;
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(800px 400px at 90% -10%, rgba(0, 212, 170, 0.06), transparent 60%),
+    radial-gradient(700px 350px at -10% 110%, rgba(245, 158, 11, 0.05), transparent 60%);
+}
+
+/* Subtle scanline / grid texture for ops-room feel */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 32px 32px;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+/* Custom range slider */
+input[type="range"].sp-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: #1f2a3a;
+  border-radius: 999px;
+  outline: none;
+}
+input[type="range"].sp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #00d4aa;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(0,212,170,0.6);
+}
+input[type="range"].sp-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #00d4aa;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+.pulse-dot { animation: pulseDot 1.6s ease-in-out infinite; }
+
+@keyframes growBar {
+  from { width: 0%; }
+}
+.grow-bar { animation: growBar 1.4s cubic-bezier(0.22, 1, 0.36, 1); }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.5s ease-out both; }
+
+.panel {
+  background: linear-gradient(180deg, #131a23 0%, #111821 100%);
+  border: 1px solid #1f2a3a;
+  border-radius: 8px;
+}
+.panel-hover { transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
+.panel-hover:hover { transform: translateY(-2px); border-color: rgba(0,212,170,0.4); box-shadow: 0 0 24px -8px rgba(0,212,170,0.35); }
+
+.label-xs {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #5b6b80;
+}

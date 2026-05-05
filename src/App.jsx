@@ -43,14 +43,6 @@ const stressTimeline = [
   { time: '10 PM', stress: 24 },
 ]
 
-const hourlySteps = [
-  { h: '8a', steps: 240 }, { h: '9a', steps: 410 }, { h: '10a', steps: 580 },
-  { h: '11a', steps: 320 }, { h: '12p', steps: 720 }, { h: '1p', steps: 690 },
-  { h: '2p', steps: 410 }, { h: '3p', steps: 220 }, { h: '4p', steps: 360 },
-  { h: '5p', steps: 880 }, { h: '6p', steps: 1020 }, { h: '7p', steps: 640 },
-  { h: '8p', steps: 352 },
-]
-
 const sessionStress = [
   { x: 0, s: 48 }, { x: 1, s: 55 }, { x: 2, s: 62 }, { x: 3, s: 70 },
   { x: 4, s: 74 }, { x: 5, s: 68 }, { x: 6, s: 58 }, { x: 7, s: 64 },
@@ -195,9 +187,16 @@ const MetricCard = ({ id, title, value, max, color, suffix, trend, openId, setOp
 }
 
 // ---------- App ----------
+// Format seconds → HH:MM:SS
+const formatHMS = (sec) => {
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
 export default function App() {
   const [openMetric, setOpenMetric] = useState(null)
-  const [stepProgress, setStepProgress] = useState(0)
   const [sessionOpen, setSessionOpen] = useState(true)
 
   const [perceivedQuality, setPerceivedQuality] = useState(3)
@@ -208,13 +207,73 @@ export default function App() {
   const [breakReminder, setBreakReminder] = useState(true)
   const [dailySummary, setDailySummary] = useState(false)
 
-  const stepGoal = 10000
-  const stepCount = 6842
+  // ----- Active study session state -----
+  const [subject, setSubject] = useState('CS 374 — Algorithms')
+  const [running, setRunning] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
+  const [livePickups, setLivePickups] = useState(0)
+  const [liveBreaks, setLiveBreaks] = useState(0)
+  const [liveStress, setLiveStress] = useState([{ t: 0, s: 48 }])
+  const [completedToday, setCompletedToday] = useState([
+    { subject: 'MATH 415 — Linear Algebra', duration: 75 * 60, avgStress: 54, pickups: 9, quality: 4 },
+  ])
 
+  // Mock live HR + stress, ticking every second when running
   useEffect(() => {
-    const t = setTimeout(() => setStepProgress((stepCount / stepGoal) * 100), 100)
-    return () => clearTimeout(t)
-  }, [])
+    if (!running) return
+    const id = setInterval(() => {
+      setElapsed((e) => e + 1)
+    }, 1000)
+    return () => clearInterval(id)
+  }, [running])
+
+  // Mock stress sampling every 10s, mock pickup detection
+  useEffect(() => {
+    if (!running) return
+    if (elapsed > 0 && elapsed % 10 === 0) {
+      setLiveStress((prev) => {
+        const base = 48 + Math.sin(elapsed / 90) * 18 + (Math.random() - 0.5) * 8
+        const next = Math.round(Math.max(20, Math.min(95, base)))
+        return [...prev, { t: elapsed, s: next }]
+      })
+    }
+    // ~1 in 25 chance per second of a "pickup" when elapsed > 30s
+    if (elapsed > 30 && Math.random() < 0.04) {
+      setLivePickups((p) => p + 1)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elapsed])
+
+  const currentStress = liveStress[liveStress.length - 1]?.s ?? 48
+  const currentHR = Math.round(68 + (currentStress - 48) * 0.4 + (Math.sin(elapsed / 6) * 1.5))
+
+  const handleStart = () => setRunning(true)
+  const handlePause = () => setRunning(false)
+  const handleBreak = () => {
+    setLiveBreaks((b) => b + 1)
+    setRunning(false)
+  }
+  const handleStop = () => {
+    if (elapsed < 5) {
+      // discard tiny sessions
+      setRunning(false)
+      setElapsed(0)
+      setLiveStress([{ t: 0, s: 48 }])
+      setLivePickups(0)
+      setLiveBreaks(0)
+      return
+    }
+    const avg = Math.round(liveStress.reduce((a, b) => a + b.s, 0) / liveStress.length)
+    setCompletedToday((prev) => [
+      { subject, duration: elapsed, avgStress: avg, pickups: livePickups, breaks: liveBreaks, quality: 3 },
+      ...prev,
+    ])
+    setRunning(false)
+    setElapsed(0)
+    setLiveStress([{ t: 0, s: 48 }])
+    setLivePickups(0)
+    setLiveBreaks(0)
+  }
 
   return (
     <div className="min-h-screen text-white">
@@ -247,41 +306,161 @@ export default function App() {
           </div>
         </section>
 
-        {/* Row 2 */}
+        {/* Active session */}
         <section>
-          <SectionTitle>Today's activity</SectionTitle>
-          <div className="panel p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-4">
-              <div className="flex items-baseline justify-between">
+          <div className="flex items-end justify-between mb-3">
+            <h2 className="font-display text-lg text-white tracking-wide">Active session</h2>
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className={cn('w-2 h-2 rounded-full', running ? 'bg-accent-cyan pulse-dot' : 'bg-accent-dim')} />
+              <span className={cn('tracking-[0.18em] uppercase', running ? 'text-accent-cyan' : 'text-accent-dim')}>
+                {running ? 'Tracking' : elapsed > 0 ? 'Paused' : 'Idle'}
+              </span>
+            </div>
+          </div>
+          <div className="panel p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+              {/* Timer column */}
+              <div className="lg:col-span-2 flex flex-col gap-4">
                 <div>
-                  <div className="label-xs mb-1">Steps</div>
-                  <div className="font-mono text-3xl tabular-nums">
-                    {stepCount.toLocaleString()}
-                    <span className="text-accent-dim text-base"> / {stepGoal.toLocaleString()}</span>
+                  <div className="label-xs mb-2">Subject</div>
+                  <input
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    disabled={running}
+                    placeholder="What are you studying?"
+                    className="w-full bg-bg-panel2 border border-bg-border rounded p-3 text-sm text-white placeholder:text-accent-dim/70 focus:outline-none focus:border-accent-cyan/60 transition-colors disabled:opacity-60"
+                    style={{ fontFamily: "'DM Mono', ui-monospace, monospace" }}
+                  />
+                </div>
+                <div className="text-center py-2">
+                  <div className="label-xs mb-2">Elapsed</div>
+                  <div
+                    className="font-mono tabular-nums tracking-wider"
+                    style={{
+                      fontSize: 56,
+                      lineHeight: 1,
+                      color: running ? '#00d4aa' : '#ffffff',
+                      textShadow: running ? '0 0 24px rgba(0,212,170,0.35)' : 'none',
+                      transition: 'color 0.3s ease',
+                    }}
+                  >
+                    {formatHMS(elapsed)}
                   </div>
                 </div>
-                <div className="font-mono text-sm text-accent-cyan tabular-nums">{Math.round((stepCount / stepGoal) * 100)}%</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {!running ? (
+                    <button
+                      onClick={handleStart}
+                      className="col-span-3 py-3 rounded font-display tracking-wider text-sm transition-colors"
+                      style={{
+                        background: '#00d4aa',
+                        color: '#0d1117',
+                        boxShadow: '0 0 20px rgba(0,212,170,0.4)',
+                      }}
+                    >
+                      {elapsed > 0 ? 'RESUME' : 'START SESSION'}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handlePause}
+                        className="py-3 rounded font-display tracking-wider text-sm border border-bg-border bg-bg-panel2 hover:border-accent-cyan/50 transition-colors"
+                      >
+                        PAUSE
+                      </button>
+                      <button
+                        onClick={handleBreak}
+                        className="py-3 rounded font-display tracking-wider text-sm border border-accent-amber/40 bg-accent-amber/10 text-accent-amber hover:bg-accent-amber/20 transition-colors"
+                      >
+                        BREAK
+                      </button>
+                      <button
+                        onClick={handleStop}
+                        className="py-3 rounded font-display tracking-wider text-sm border border-bg-border bg-bg-panel2 text-white hover:border-red-400/50 hover:text-red-400 transition-colors"
+                      >
+                        END
+                      </button>
+                    </>
+                  )}
+                  {!running && elapsed > 0 && (
+                    <button
+                      onClick={handleStop}
+                      className="col-span-3 py-2 mt-1 rounded font-display tracking-wider text-xs border border-bg-border text-accent-dim hover:text-white transition-colors"
+                    >
+                      SAVE & END SESSION
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="h-2 rounded-full bg-bg-panel2 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-accent-cyan"
-                  style={{ width: `${stepProgress}%`, transition: 'width 1.4s cubic-bezier(0.22, 1, 0.36, 1)' }}
-                />
-              </div>
-              <div className="pt-2">
-                <div className="label-xs mb-2">Hourly · 8a–10p</div>
-                <div className="h-12">
-                  <Sparkline data={hourlySteps} dataKey="steps" color="#00d4aa" height={48} />
+
+              {/* Live stats column */}
+              <div className="lg:col-span-3 lg:border-l border-bg-border lg:pl-8 grid grid-cols-2 gap-x-6 gap-y-5">
+                <div>
+                  <div className="label-xs mb-1">Heart rate</div>
+                  <div className="font-mono text-3xl tabular-nums">
+                    {running ? currentHR : '—'}
+                    <span className="text-accent-dim text-base"> bpm</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="label-xs mb-1">Current stress</div>
+                  <div
+                    className="font-mono text-3xl tabular-nums"
+                    style={{ color: currentStress > 70 ? '#f59e0b' : currentStress > 50 ? '#ffffff' : '#00d4aa' }}
+                  >
+                    {running ? currentStress : '—'}
+                  </div>
+                </div>
+                <div>
+                  <div className="label-xs mb-1">Phone pickups</div>
+                  <div className="font-mono text-3xl tabular-nums text-accent-amber">{livePickups}</div>
+                </div>
+                <div>
+                  <div className="label-xs mb-1">Breaks</div>
+                  <div className="font-mono text-3xl tabular-nums">{liveBreaks}</div>
+                </div>
+                <div className="col-span-2">
+                  <div className="label-xs mb-2">Stress · live</div>
+                  <div className="h-16">
+                    {liveStress.length > 1 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={liveStress} margin={{ top: 4, right: 2, bottom: 2, left: 2 }}>
+                          <defs>
+                            <linearGradient id="live-stress-grad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#00d4aa" stopOpacity={0.4} />
+                              <stop offset="100%" stopColor="#00d4aa" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <Area type="monotone" dataKey="s" stroke="#00d4aa" strokeWidth={1.5} fill="url(#live-stress-grad)" dot={false} isAnimationActive={false} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-xs text-accent-dim border border-dashed border-bg-border rounded">
+                        Waiting for first reading…
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="border-t lg:border-t-0 lg:border-l border-bg-border lg:pl-8 pt-6 lg:pt-0 flex flex-col justify-center">
-              <div className="label-xs mb-1">Calories burned</div>
-              <div className="font-mono text-4xl tabular-nums">1,240<span className="text-accent-dim text-lg"> kcal</span></div>
-              <div className="text-xs text-accent-dim mt-3 space-y-1">
-                <div className="flex justify-between"><span>Active</span><span className="text-white font-mono">412</span></div>
-                <div className="flex justify-between"><span>Resting</span><span className="text-white font-mono">828</span></div>
-              </div>
+
+            {/* Today's completed sessions */}
+            <div className="mt-6 pt-5 border-t border-bg-border">
+              <div className="label-xs mb-3">Sessions today · {completedToday.length}</div>
+              {completedToday.length === 0 ? (
+                <div className="text-xs text-accent-dim">No completed sessions yet.</div>
+              ) : (
+                <div className="space-y-2">
+                  {completedToday.map((s, i) => (
+                    <div key={i} className="grid grid-cols-2 md:grid-cols-5 gap-3 items-center px-3 py-2.5 rounded border border-bg-border bg-bg-panel2/40 text-sm fade-up">
+                      <div className="md:col-span-2 truncate text-white">{s.subject}</div>
+                      <div className="font-mono tabular-nums text-accent-cyan">{formatHMS(s.duration)}</div>
+                      <div className="text-xs"><span className="text-accent-dim">stress </span><span className="font-mono tabular-nums text-white">{s.avgStress}</span></div>
+                      <div className="text-xs"><span className="text-accent-dim">pickups </span><span className="font-mono tabular-nums text-accent-amber">{s.pickups}</span></div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </section>
